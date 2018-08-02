@@ -51,6 +51,15 @@ fi
 # now running under a controlling tty; debug output from stderr into log file
 # boot up Android
 
+setup_muen()
+{
+	mkdir -p /muenfs
+	insmod /lib/modules/muenfs.ko
+	mount -t muenfs none /muenfs
+	insmod /lib/modules/mlw-blockdev-common.ko
+	insmod /lib/modules/mlw-blockdev-client.ko req_shm_name=BLOCKDEV1_request resp_shm_name=BLOCKDEV1_response req_shm_protocol=9570208dca77db19 resp_shm_protocol=9851be3282fef0dc mlw_blk_poll_interval=1
+}
+
 error()
 {
 	echo $*
@@ -98,7 +107,7 @@ check_root()
 		mount -o loop,noatime /sfs/system.img system
 	elif [ -e /mnt/$SRC/system.img ]; then
 		remount_rw
-		mount -o loop,noatime /mnt/$SRC/system.img system
+		mount -o loop,noatime,ro /mnt/$SRC/system.img system
 	elif [ -d /mnt/$SRC/system ]; then
 		remount_rw
 		mount --bind /mnt/$SRC/system system
@@ -123,16 +132,14 @@ remount_rw()
 
 debug_shell()
 {
-	if [ -x system/bin/sh ]; then
-		echo Running MirBSD Korn Shell...
-		USER="($1)" system/bin/sh -l 2>&1
-	else
-		echo Running busybox ash...
-		sh 2>&1
-	fi
+	echo Running busybox sh...
+	/bin/busybox sh -l -i </dev/tty1 >/dev/tty1 2>&1
+	echo "SHELL EXITED..."
 }
 
 echo -n Detecting Android-x86...
+
+setup_muen
 
 [ -z "$SRC" -a -n "$BOOT_IMAGE" ] && SRC=`dirname $BOOT_IMAGE`
 [ -z "$RAMDISK" ] && RAMDISK=ramdisk.img || RAMDISK=${RAMDISK##/dev/}
@@ -150,7 +157,7 @@ done
 mount -t tmpfs tmpfs /android
 cd /android
 while :; do
-	for device in ${ROOT:-/dev/[hmnsv][dmrv][0-9a-z]*}; do
+	for device in ${ROOT:-/dev/[hmnsv][dmrvl][0-9a-z]*}; do
 		check_root $device && break 2
 		mountpoint -q /mnt && umount /mnt
 	done
@@ -184,7 +191,7 @@ done
 # ensure keyboard driver is loaded
 [ -n "$INSTALL" -o -n "$DEBUG" ] && auto_detect &
 
-if [ 0$DEBUG -gt 0 ]; then
+if [ 0$DEBUG_SHELL -gt 0 ]; then
 	echo -e "\nType 'exit' to continue booting...\n"
 	debug_shell debug-found
 fi
